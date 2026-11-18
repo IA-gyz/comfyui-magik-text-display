@@ -7,6 +7,25 @@ const GENERIC_FONTS = {
     "System UI": "system-ui, sans-serif",
 };
 
+function largestFittingFontSize(content, area) {
+    // Find the largest whole-pixel size that fits both dimensions.
+    let low = 1;
+    let high = 128;
+    let best = 1;
+    while (low <= high) {
+        const size = Math.floor((low + high) / 2);
+        content.style.fontSize = `${size}px`;
+        if (content.scrollHeight <= area.clientHeight && content.scrollWidth <= area.clientWidth) {
+            best = size;
+            low = size + 1;
+        } else {
+            high = size - 1;
+        }
+    }
+    content.style.fontSize = `${best}px`;
+    return best;
+}
+
 let activePanel = null;
 
 function openTextPanel(preview) {
@@ -56,21 +75,7 @@ function openTextPanel(preview) {
         if (!dialog.open) return;
         text.textContent = preview.textContent;
         text.style.fontFamily = preview.style.fontFamily;
-        // Find the largest whole-pixel size that fits both dimensions.
-        let low = 1;
-        let high = 128;
-        let best = 1;
-        while (low <= high) {
-            const size = Math.floor((low + high) / 2);
-            text.style.fontSize = `${size}px`;
-            if (text.scrollHeight <= area.clientHeight && text.scrollWidth <= area.clientWidth) {
-                best = size;
-                low = size + 1;
-            } else {
-                high = size - 1;
-            }
-        }
-        text.style.fontSize = `${best}px`;
+        largestFittingFontSize(text, area);
     };
     let frame = 0;
     const scheduleFit = () => {
@@ -150,6 +155,9 @@ app.registerExtension({
             preview.addEventListener("dblclick", () => { panel = openTextPanel(preview); });
             const removed = this.onRemoved;
             this.onRemoved = function () {
+                cancelAnimationFrame(fitFrame);
+                previewResize.disconnect();
+                document.fonts?.removeEventListener("loadingdone", scheduleFit);
                 if (panel?.open) panel.close();
                 return removed?.apply(this, arguments);
             };
@@ -168,18 +176,37 @@ app.registerExtension({
                 preview.textContent = values.map((value) => String(value)).join("\n\n");
                 this.properties.magik_display_text = values;
             };
+            const isAutofit = () => this.widgets.find((w) => w.name === "autofit")?.value === true;
             const updateStyle = () => {
                 const font = this.widgets.find((w) => w.name === "font")?.value ?? "Sans-serif";
-                const size = Number(this.widgets.find((w) => w.name === "font_size")?.value);
                 preview.style.fontFamily = GENERIC_FONTS[font] ?? `"${font}", ${/Mono|Courier/.test(font) ? "monospace" : /Serif|Georgia/.test(font) ? "serif" : "sans-serif"}`;
+                if (isAutofit() && preview.clientWidth > 0 && preview.clientHeight > 0) {
+                    largestFittingFontSize(preview, preview);
+                    return;
+                }
+                const size = Number(this.widgets.find((w) => w.name === "font_size")?.value);
                 preview.style.fontSize = `${Math.min(128, Math.max(1, Number.isFinite(size) ? size : 20))}px`;
             };
+            let fitFrame = 0;
+            const scheduleFit = () => {
+                cancelAnimationFrame(fitFrame);
+                fitFrame = requestAnimationFrame(() => {
+                    if (isAutofit() && preview.clientWidth > 0 && preview.clientHeight > 0) {
+                        largestFittingFontSize(preview, preview);
+                    }
+                });
+            };
+            const previewResize = new ResizeObserver(scheduleFit);
+            previewResize.observe(preview);
+            document.fonts?.ready.then(scheduleFit);
+            document.fonts?.addEventListener("loadingdone", scheduleFit);
             const saveTypography = () => {
                 this.properties.magik_display_font = this.widgets.find((w) => w.name === "font")?.value ?? "Sans-serif";
                 const size = Number(this.widgets.find((w) => w.name === "font_size")?.value);
                 this.properties.magik_display_font_size = Math.min(128, Math.max(1, Number.isFinite(size) ? size : 20));
+                this.properties.magik_display_autofit = isAutofit();
             };
-            for (const name of ["font", "font_size"]) {
+            for (const name of ["font", "font_size", "autofit"]) {
                 const widget = this.widgets.find((w) => w.name === name);
                 if (!widget) continue;
                 const callback = widget.callback;
@@ -220,6 +247,10 @@ app.registerExtension({
                 if (size && Number.isFinite(saved.magik_display_font_size)) {
                     size.value = Math.min(128, Math.max(1, Math.round(saved.magik_display_font_size)));
                 }
+                const autofit = this.widgets.find((w) => w.name === "autofit");
+                if (autofit && typeof saved.magik_display_autofit === "boolean") {
+                    autofit.value = saved.magik_display_autofit;
+                }
                 updateText(this.properties.magik_display_text ?? []);
                 saveTypography();
                 updateStyle();
@@ -232,6 +263,7 @@ app.registerExtension({
                 info.properties ??= {};
                 info.properties.magik_display_font = this.properties.magik_display_font;
                 info.properties.magik_display_font_size = this.properties.magik_display_font_size;
+                info.properties.magik_display_autofit = this.properties.magik_display_autofit === true;
                 return value;
             };
             updateText(this.properties.magik_display_text ?? []);

@@ -11,6 +11,9 @@ No extra Python dependencies are required.
 
 Connect a STRING output to **text**, choose **font**, and set **font_size**
 from **1 to 128 px** (default: 20). Run the workflow to display the text.
+Enable **autofit** to automatically resize the font so the text fills the
+preview area (the largest size that fits, up to 128 px, refitting when the
+node, text, font or window changes); when off, **font_size** applies.
 Changing typography updates the existing display immediately, without rerunning.
 The node runs even when its output is unconnected.
 

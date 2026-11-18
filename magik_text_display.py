@@ -16,6 +16,7 @@ class MagikTextDisplay:
             "text": ("STRING", {"forceInput": True}),
             "font": (FONTS, {"default": "Sans-serif"}),
             "font_size": ("INT", {"default": 20, "min": 1, "max": 128, "step": 1}),
+            "autofit": ("BOOLEAN", {"default": False}),
         }}
 
     INPUT_IS_LIST = True
@@ -25,8 +26,8 @@ class MagikTextDisplay:
     FUNCTION = "display"
     CATEGORY = "Magik/Text"
     OUTPUT_NODE = True
-    DESCRIPTION = "Display incoming text using selectable fonts and sizes from 1 to 128 px."
+    DESCRIPTION = "Display incoming text using selectable fonts and sizes from 1 to 128 px; enable autofit to fill the preview area."
 
-    def display(self, text, font, font_size):
+    def display(self, text, font, font_size, autofit):
         # Consume the complete input list once so the preview includes every item.
         return {"ui": {"text": list(text)}, "result": (list(text),)}
